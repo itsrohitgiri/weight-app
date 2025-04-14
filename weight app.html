@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Weight Estimator</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#66a6ff" />
+  <link rel="icon" href="icon.png" />
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #74ebd5, #acb6e5);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #container {
+      background: white;
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.15);
+      text-align: center;
+      width: 90%;
+      max-width: 500px;
+    }
+
+    #weight {
+      font-size: 48px;
+      margin: 20px 0;
+      color: #333;
+    }
+
+    #instruction {
+      font-size: 18px;
+      color: #555;
+    }
+
+    #circle {
+      margin: 20px auto;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background-color: #66a6ff;
+      transition: transform 0.1s ease;
+    }
+
+    canvas {
+      margin-top: 20px;
+      max-width: 100%;
+    }
+
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #66a6ff;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="instruction">Press and hold your finger on the screen</div>
+    <div id="weight">0 g</div>
+    <div id="circle"></div>
+    <canvas id="pressureChart" height="100"></canvas>
+    <button onclick="downloadCSV()">Download Data</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const weightDisplay = document.getElementById("weight");
+  const circle = document.getElementById("circle");
+
+  const pressureData = {
+    labels: [],
+    datasets: [{
+      label: 'Pressure',
+      data: [],
+      backgroundColor: 'rgba(102, 166, 255, 0.3)',
+      borderColor: '#66a6ff',
+      borderWidth: 2,
+      fill: true,
+      tension: 0.4
+    }]
+  };
+
+  const pressureChart = new Chart(document.getElementById("pressureChart"), {
+    type: 'line',
+    data: pressureData,
+    options: {
+      responsive: true,
+      animation: false,
+      scales: {
+        y: {
+          min: 0,
+          max: 1,
+          title: { display: true, text: "Touch Pressure" }
+        },
+        x: {
+          display: false
+        }
+      }
+    }
+  });
+
+  let time = 0;
+  let tracking = false;
+
+  function estimateWeight(force) {
+    const grams = force * 1000;
+    return Math.round(grams);
+  }
+
+  function updateVisuals(force) {
+    const weight = estimateWeight(force);
+    weightDisplay.textContent = `${weight} g`;
+    circle.style.transform = `scale(${1 + force * 2})`;
+
+    if (tracking) {
+      pressureData.labels.push(time++);
+      pressureData.datasets[0].data.push(force);
+      if (pressureData.labels.length > 50) {
+        pressureData.labels.shift();
+        pressureData.datasets[0].data.shift();
+      }
+      pressureChart.update();
+    }
+  }
+
+  function startTracking() {
+    time = 0;
+    pressureData.labels = [];
+    pressureData.datasets[0].data = [];
+    pressureChart.update();
+    tracking = true;
+  }
+
+  function stopTracking() {
+    tracking = false;
+    weightDisplay.textContent = "0 g";
+    circle.style.transform = "scale(1)";
+  }
+
+  function updateForce(e) {
+    const touch = e.touches[0];
+    if (touch && typeof touch.force !== "undefined" && touch.force > 0) {
+      updateVisuals(touch.force);
+    } else {
+      weightDisplay.textContent = "Touch pressure not supported";
+    }
+  }
+
+  window.addEventListener("touchstart", (e) => {
+    startTracking();
+    updateForce(e);
+  });
+
+  window.addEventListener("touchmove", (e) => {
+    updateForce(e);
+  });
+
+  window.addEventListener("touchend", () => {
+    stopTracking();
+  });
+
+  function downloadCSV() {
+    let csv = "Time(ms),Pressure\n";
+    pressureData.labels.forEach((label, i) => {
+      csv += `${label},${pressureData.datasets[0].data[i]}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "pressure_data.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js');
+    });
+  }
+</script>
+</body>
+</html>
